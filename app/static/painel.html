@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ApexPT Agente</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #16181d; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #2563eb; --ok: #15803d; --warn: #b45309; --bad: #b91c1c; --chip: #eef2f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1115; --card: #171a21; --text: #e8eaee; --muted: #9aa3b2; --line: #272b35;
+            --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --chip: #222733; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 16px; margin: 32px 0 12px; display: flex; align-items: center; gap: 8px; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 16px; }
+  .stat b { display: block; font-size: 20px; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 99px; background: var(--chip); font-size: 12px; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  button { border: 1px solid var(--line); background: var(--card); border-radius: 7px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--bad); }
+  input, select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; width: 100%; }
+  textarea { min-height: 70px; resize: vertical; }
+  .list { display: grid; gap: 10px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .draft .src { margin: 6px 0; }
+  .draft .actions { margin-top: 10px; }
+  .problems { font-size: 13px; color: var(--warn); }
+  form.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  form.grid .full { grid-column: 1 / -1; }
+  label { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  .table-wrap { overflow-x: auto; }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); padding: 10px 16px;
+           border-radius: 8px; background: var(--text); color: var(--bg); display: none; max-width: 90vw; }
+  #login { max-width: 420px; margin: 80px auto; }
+  @media (max-width: 600px) { form.grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <section id="login" class="card" hidden>
+    <h1>Painel do agente</h1>
+    <p class="muted">Cola o <code>ADMIN_API_KEY</code> do <code>.env</code>. Fica guardado só neste browser.</p>
+    <form id="login-form" class="row">
+      <input id="key" type="password" placeholder="ADMIN_API_KEY" autocomplete="off" style="flex:1">
+      <button class="primary">Entrar</button>
+    </form>
+  </section>
+
+  <section id="app" hidden>
+    <header>
+      <h1>ApexPT · Agente de Instagram</h1>
+      <div class="row">
+        <button id="pause-btn">Pausar</button>
+        <button id="refresh">Atualizar</button>
+        <button id="logout" class="muted">Sair</button>
+      </div>
+    </header>
+    <div class="stats" id="stats"></div>
+
+    <section id="sim" hidden>
+      <h2>Simular <span class="chip">modo teste</span></h2>
+      <form id="sim-form" class="card grid">
+        <label>Tipo
+          <select name="kind"><option value="comment">Comentário</option><option value="dm">DM</option></select>
+        </label>
+        <label>Utilizador
+          <input name="username" value="cliente_teste">
+        </label>
+        <label class="full">Mensagem
+          <textarea name="text" required placeholder="Isto dá para acompanhar a evolução dos alunos?"></textarea>
+        </label>
+        <div class="full row"><button class="primary">Enviar para o agente</button>
+          <span class="muted">Nada vai para o Instagram. O rascunho aparece aqui e no Telegram.</span></div>
+      </form>
+    </section>
+
+    <h2>Rascunhos
+      <select id="draft-filter" style="width:auto">
+        <option value="awaiting_approval">à espera</option>
+        <option value="">todos</option>
+        <option value="published">publicados</option>
+        <option value="discarded">descartados</option>
+        <option value="failed">falhados</option>
+      </select>
+    </h2>
+    <div class="list" id="drafts"></div>
+
+    <h2>Agendar post</h2>
+    <form id="post-form" class="card grid">
+      <label>Tipo
+        <select name="media_type">
+          <option>IMAGE</option><option selected>REELS</option><option>STORIES</option><option>CAROUSEL</option>
+        </select>
+      </label>
+      <label>Publicar em (hora local)
+        <input name="publish_at" type="datetime-local" required>
+      </label>
+      <label class="full">URLs https públicos (um por linha; 2 a 10 no carrossel)
+        <textarea name="media_urls" required placeholder="https://media.apexpt.app/reel-01.mp4"></textarea>
+      </label>
+      <label class="full">Legenda
+        <textarea name="caption" maxlength="2200"></textarea>
+      </label>
+      <div class="full row"><button class="primary">Agendar</button></div>
+    </form>
+
+    <h2>Posts</h2>
+    <div class="card table-wrap"><table>
+      <thead><tr><th>#</th><th>Tipo</th><th>Quando</th><th>Legenda</th><th>Estado</th><th></th></tr></thead>
+      <tbody id="posts"></tbody>
+    </table></div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const when = (iso) => iso ? new Date(iso).toLocaleString("pt-PT", {dateStyle: "short", timeStyle: "short"}) : "—";
+
+let key = "";
+try { key = localStorage.getItem("apexpt-admin-key") || ""; } catch {}
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", 3500);
+}
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {...opts, headers: {"X-API-Key": key, "Content-Type": "application/json", ...(opts.headers || {})}});
+  if (r.status === 401) { showLogin(); throw new Error("API key inválida"); }
+  const body = r.headers.get("content-type")?.includes("json") ? await r.json() : await r.text();
+  if (!r.ok) {
+    const d = body?.detail;
+    throw new Error(Array.isArray(d) ? d.map((x) => x.msg).join("; ") : d || `Erro ${r.status}`);
+  }
+  return body;
+}
+
+function showLogin() { $("#app").hidden = true; $("#login").hidden = false; $("#key").focus(); }
+
+async function loadStatus() {
+  const s = await api("/admin/status");
+  const cfg = s.configured;
+  const flag = (b) => b ? '<span class="ok">ok</span>' : '<span class="bad">falta</span>';
+  const paused = s.paused === null ? '<span class="bad">sem Redis</span>'
+               : s.paused ? '<span class="warn">em pausa</span>' : '<span class="ok">ativo</span>';
+  $("#stats").innerHTML = `
+    <div class="card stat"><span>Estado</span><b>${paused}</b></div>
+    <div class="card stat"><span>Modo</span><b>${esc(s.autonomy_mode)}</b></div>
+    <div class="card stat"><span>Rascunhos à espera</span><b>${s.drafts_pending}</b></div>
+    <div class="card stat"><span>Posts por aprovar</span><b>${s.posts_awaiting}</b></div>
+    <div class="card stat"><span>Posts agendados</span><b>${s.posts_pending}</b></div>
+    <div class="card stat"><span>Token IG expira</span><b style="font-size:15px">${when(s.token_expires_at)}</b></div>
+    <div class="card stat"><span>Configuração</span>
+      <div style="font-size:13px">Instagram ${flag(cfg.instagram)} · Claude ${flag(cfg.anthropic)}<br>
+      Telegram ${flag(cfg.telegram)} · Redis ${flag(s.redis)}</div></div>`;
+  $("#sim").hidden = !s.dry_run;
+  const btn = $("#pause-btn");
+  btn.disabled = s.paused === null;
+  btn.textContent = s.paused ? "Retomar" : "Pausar";
+  btn.dataset.paused = s.paused ? "1" : "";
+}
+
+async function loadDrafts() {
+  const f = $("#draft-filter").value;
+  const drafts = await api("/drafts" + (f ? `?status=${f}` : ""));
+  $("#drafts").innerHTML = drafts.length ? drafts.map((d) => `
+    <div class="card draft" data-id="${d.id}">
+      <div class="row">
+        <b>#${d.id}</b><span class="chip">${esc(d.kind)}</span><span class="chip">${esc(d.intent || "?")}</span>
+        <span class="muted">@${esc(d.username || "?")} · ${when(d.created_at)}</span>
+        <span class="chip" style="margin-left:auto">${esc(d.status)}</span>
+      </div>
+      <div class="src">“${esc(d.source)}”</div>
+      ${d.problems?.length ? `<div class="problems">⚠ ${d.problems.map(esc).join(" · ")}</div>` : ""}
+      ${d.status === "awaiting_approval" ? `
+        <textarea>${esc(d.reply)}</textarea>
+        <div class="row actions">
+          <button class="primary" data-act="approve">Publicar</button>
+          <button data-act="discard">Descartar</button>
+          ${d.kind === "comment" ? '<button class="danger" data-act="hide">Esconder comentário</button>' : ""}
+        </div>` : d.reply ? `<div class="muted">→ ${esc(d.reply)}</div>` : ""}
+    </div>`).join("") : '<p class="muted">Nada aqui.</p>';
+}
+
+async function loadPosts() {
+  const posts = await api("/posts");
+  $("#posts").innerHTML = posts.length ? posts.map((p) => `
+    <tr><td>${p.id}</td><td>${esc(p.media_type)}</td><td>${when(p.publish_at)}</td>
+      <td>${esc(p.caption)}${p.error ? `<div class="bad" style="font-size:12px">${esc(p.error)}</div>` : ""}</td>
+      <td><span class="chip">${esc(p.status)}</span></td>
+      <td><div class="row">
+        ${p.status === "awaiting_approval" ? `<button class="primary" data-post="approve" data-id="${p.id}">Aprovar</button>
+          <button data-post="reject" data-id="${p.id}">Rejeitar</button>` : ""}
+        ${["pending", "awaiting_approval"].includes(p.status) ? `<button class="danger" data-cancel="${p.id}">Cancelar</button>` : ""}
+      </div></td></tr>`
+  ).join("") : '<tr><td colspan="6" class="muted">Sem posts.</td></tr>';
+}
+
+async function refresh() {
+  try { await Promise.all([loadStatus(), loadDrafts(), loadPosts()]); }
+  catch (e) { toast(e.message); }
+}
+
+async function start() {
+  if (!key) return showLogin();
+  $("#login").hidden = true; $("#app").hidden = false;
+  await refresh();
+}
+
+$("#login-form").onsubmit = (e) => {
+  e.preventDefault();
+  key = $("#key").value.trim();
+  try { localStorage.setItem("apexpt-admin-key", key); } catch {}
+  start();
+};
+$("#logout").onclick = () => { key = ""; try { localStorage.removeItem("apexpt-admin-key"); } catch {} showLogin(); };
+$("#refresh").onclick = refresh;
+$("#draft-filter").onchange = () => loadDrafts().catch((e) => toast(e.message));
+
+$("#pause-btn").onclick = async (e) => {
+  const resume = e.target.dataset.paused === "1";
+  try { await api(resume ? "/admin/resume" : "/admin/pause", {method: "POST"}); toast(resume ? "Agente retomado" : "Agente em pausa"); }
+  catch (err) { toast(err.message); }
+  loadStatus().catch(() => {});
+};
+
+$("#drafts").onclick = async (e) => {
+  const act = e.target.dataset.act; if (!act) return;
+  const card = e.target.closest(".draft"), id = card.dataset.id;
+  if (act === "hide" && !confirm("Esconder este comentário no Instagram?")) return;
+  const body = {action: act};
+  if (act === "approve") body.edited_text = card.querySelector("textarea").value;
+  try { const r = await api(`/drafts/${id}/decision`, {method: "POST", body: JSON.stringify(body)}); toast(`#${id}: ${r.status}`); }
+  catch (err) { toast(err.message); }
+  refresh();
+};
+
+$("#sim-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target), btn = e.target.querySelector("button");
+  btn.disabled = true; btn.textContent = "A pensar…";
+  try {
+    const r = await api("/dev/simulate", {method: "POST", body: JSON.stringify(Object.fromEntries(f))});
+    toast(`#${r.id}: ${r.status}${r.intent ? " · " + r.intent : ""}`);
+    e.target.querySelector("textarea").value = "";
+  } catch (err) { toast(err.message); }
+  btn.disabled = false; btn.textContent = "Enviar para o agente";
+  refresh();
+};
+
+$("#posts").onclick = async (e) => {
+  if (e.target.dataset.post) {
+    const id = e.target.dataset.id, action = e.target.dataset.post;
+    try { const r = await api(`/posts/${id}/decision`, {method: "POST", body: JSON.stringify({action})}); toast(`Post #${id}: ${r.status === "pending" ? "aprovado" : "rejeitado"}`); }
+    catch (err) { toast(err.message); }
+    return refresh();
+  }
+  const id = e.target.dataset.cancel; if (!id || !confirm(`Cancelar o post #${id}?`)) return;
+  try { await api(`/posts/${id}`, {method: "DELETE"}); toast(`Post #${id} cancelado`); }
+  catch (err) { toast(err.message); }
+  refresh();
+};
+
+$("#post-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    media_type: f.get("media_type"),
+    media_urls: f.get("media_urls").split("\n").map((s) => s.trim()).filter(Boolean),
+    caption: f.get("caption"),
+    publish_at: new Date(f.get("publish_at")).toISOString(),
+  };
+  try { const r = await api("/posts", {method: "POST", body: JSON.stringify(payload)}); toast(`Post #${r.id} agendado`); e.target.reset(); }
+  catch (err) { toast(err.message); }
+  refresh();
+};
+
+start();
+</script>
+</body>
+</html>
