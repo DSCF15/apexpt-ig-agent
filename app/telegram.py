@@ -9,6 +9,8 @@ import httpx
 
 log = logging.getLogger(__name__)
 LISBON = ZoneInfo("Europe/Lisbon")
+# o httpx regista o URL de cada pedido, e o URL da Bot API contém o token: nunca em INFO
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class Notifier:
