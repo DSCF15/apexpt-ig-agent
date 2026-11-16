@@ -1,8 +1,9 @@
+# Produção (Raspberry Pi 5 / qualquer Linux com Docker). Guia: docs/RASPBERRY_PI.md
 services:
   api:
     build: .
     env_file: .env
-    ports: ["127.0.0.1:8000:8000"]   # expor com HTTPS via Caddy/Nginx/Cloudflare Tunnel
+    ports: ["127.0.0.1:8000:8000"]   # só local; o acesso público é pelo Cloudflare Tunnel
     depends_on: [postgres, redis]
     restart: unless-stopped
 
@@ -20,11 +21,28 @@ services:
     depends_on: [redis]
     restart: unless-stopped
 
+  # Bot do Telegram em polling: não precisa de webhook nem de URL público
+  telegram:
+    build: .
+    env_file: .env
+    command: python scripts/telegram_poll.py
+    depends_on: [postgres, redis]
+    restart: unless-stopped
+
+  # HTTPS público (webhooks da Meta) sem abrir portas no router
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on: [api]
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: agent
-      POSTGRES_PASSWORD: agent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agent}
       POSTGRES_DB: agent
     volumes: [pgdata:/var/lib/postgresql/data]
     restart: unless-stopped
@@ -33,6 +51,23 @@ services:
     image: redis:7-alpine
     command: redis-server --appendonly yes
     volumes: [redisdata:/data]
+    restart: unless-stopped
+
+  # Cópia diária da base de dados para ./backups (guarda 14 dias)
+  backup:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-agent}
+    volumes: ["./backups:/backups"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          pg_dump -h postgres -U agent agent | gzip > /backups/agent-$$(date +%F).sql.gz
+          find /backups -name 'agent-*.sql.gz' -mtime +14 -delete
+          sleep 86400
+        done
+    depends_on: [postgres]
     restart: unless-stopped
 
 volumes:

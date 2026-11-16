@@ -72,7 +72,9 @@ curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
 
 Comandos: `/pausa`, `/retoma`, `/estado`.
 
-## 4. Produção (VPS com Docker)
+## 4. Produção (Raspberry Pi ou VPS com Docker)
+
+**Raspberry Pi 5: segue o guia [docs/RASPBERRY_PI.md](docs/RASPBERRY_PI.md)** (Docker, Cloudflare Tunnel, backups). O resto desta secção é para um VPS.
 
 ```bash
 docker compose up -d --build
