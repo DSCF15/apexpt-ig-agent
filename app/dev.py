@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 import logging
 from types import SimpleNamespace
 
@@ -69,16 +70,28 @@ class OfflineLLM:
         self.messages = self
 
     def create(self, **kw):
-        tool = (kw.get("tool_choice") or {}).get("name")
-        if tool == "classificar":
+        props = ((kw.get("output_config") or {}).get("format") or {}).get("schema", {}).get("properties", {})
+        if "intent" in props:
             text = str(kw.get("messages", "")).lower()
             intent = ("preco" if any(w in text for w in ("preço", "preco", "€", "quanto custa"))
                       else "pergunta_produto" if "?" in text else "elogio")
-            data = {"intent": intent, "language": "pt", "toxicity": 0.0, "needs_reply": True,
-                    "confidence": 0.5, "summary": "classificação offline (sem Claude)"}
-            return SimpleNamespace(content=[SimpleNamespace(type="tool_use", name=tool, input=data)])
-        if tool == "verificar":
-            data = {"grounded": False, "safe": True, "reason": "modo offline: rever à mão"}
-            return SimpleNamespace(content=[SimpleNamespace(type="tool_use", name=tool, input=data)])
-        return SimpleNamespace(content=[SimpleNamespace(
+            return _json({"intent": intent, "language": "pt", "toxicity": 0.0, "needs_reply": True,
+                          "confidence": 0.5, "summary": "classificação offline (sem Claude)"})
+        if "grounded" in props:
+            return _json({"grounded": False, "safe": True, "reason": "modo offline: rever à mão"})
+        if "options" in props:
+            return _json({"options": [
+                {"angle": "teste A", "caption": "Legenda de teste A (sem Claude). Sabe mais em apexpt.app",
+                 "hashtags": ["personaltrainer", "apexpt"]},
+                {"angle": "teste B", "caption": "Legenda de teste B (sem Claude). Guarda este post!",
+                 "hashtags": ["treino", "ptportugal"]},
+                {"angle": "teste C", "caption": "Legenda de teste C (sem Claude). Qual é a tua maior dor como PT?",
+                 "hashtags": ["coachingonline"]},
+            ]})
+        return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(
             type="text", text="Obrigado pela mensagem! (resposta de teste, sem Claude)")])
+
+
+def _json(data: dict):
+    return SimpleNamespace(stop_reason="end_turn",
+                           content=[SimpleNamespace(type="text", text=json.dumps(data, ensure_ascii=False))])

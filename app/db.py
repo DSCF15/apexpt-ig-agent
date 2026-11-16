@@ -103,3 +103,21 @@ def recent_replies(session, limit: int = 50) -> list[str]:
         .limit(limit)
     )
     return [r for r in rows if r]
+
+
+class ContentProposal(Base):
+    """Um ficheiro enviado pelo Telegram, as legendas propostas e as escolhas até virar post."""
+
+    __tablename__ = "content_proposals"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    media_type: Mapped[str] = mapped_column(String(16))  # IMAGE | REELS | STORIES
+    file_name: Mapped[str] = mapped_column(String(64))  # em MEDIA_DIR, servido em /media/<nome>
+    hint: Mapped[str] = mapped_column(Text, default="")  # o que escreveste junto ao ficheiro
+    options: Mapped[list | None] = mapped_column(JSON)  # [{angle, caption}]
+    caption: Mapped[str | None] = mapped_column(Text)  # a legenda escolhida
+    status: Mapped[str] = mapped_column(String(20), default="proposing", index=True)
+    # proposing | choose_caption | choose_time | scheduled | discarded | failed
+    telegram_message_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    post_id: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

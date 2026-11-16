@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     model_classify: str = "claude-haiku-5-5"
     model_draft: str = "claude-sonnet-5-5"
+    model_content: str = "claude-opus-5-5"  # legendas dos posts (poucos pedidos, mais criatividade)
 
     # Infra
     database_url: str = "sqlite:///./agent.db"
@@ -42,6 +43,8 @@ class Settings(BaseSettings):
     max_auto_dm_turns: int = 3
     allowed_domains: str = "apexpt.app"  # separados por vírgula
     knowledge_dir: str = "knowledge"
+    media_dir: str = "media"  # ficheiros recebidos pelo Telegram
+    public_base_url: str = ""  # ex.: https://agente.apexpt.app (a Meta descarrega daqui os ficheiros)
 
     @property
     def allowed_domain_list(self) -> list[str]:

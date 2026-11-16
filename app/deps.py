@@ -28,7 +28,7 @@ def get_agent() -> Agent:
         ig = InstagramClient(tokens.get, s.ig_user_id, s.ig_api_version)
         llm = Anthropic(api_key=s.anthropic_api_key or None)
     brain = Brain(llm, model_classify=s.model_classify, model_draft=s.model_draft,
-                  knowledge_dir=s.knowledge_dir)
+                  model_content=s.model_content, knowledge_dir=s.knowledge_dir)
     limiter = Limiter(redis.Redis.from_url(s.redis_url))
     notifier: Notifier = (TelegramNotifier(s.telegram_bot_token, s.telegram_chat_id)
                           if s.telegram_bot_token and s.telegram_chat_id else Notifier())

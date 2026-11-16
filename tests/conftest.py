@@ -29,14 +29,25 @@ class FakeLLM:
         self.calls = []
         self.messages = self
 
+    captions = [{"angle": f"ângulo {i}", "caption": f"Legenda {i}", "hashtags": ["#pt", "fitness"]}
+                for i in (1, 2, 3)]
+
     def create(self, **kw):
+        assert "tool_choice" not in kw  # forçar ferramenta dá 400 nos modelos atuais
         self.calls.append(kw)
-        tool = (kw.get("tool_choice") or {}).get("name")
-        if tool == "classificar":
-            return SimpleNamespace(content=[SimpleNamespace(type="tool_use", name=tool, input=self.classification)])
-        if tool == "verificar":
-            return SimpleNamespace(content=[SimpleNamespace(type="tool_use", name=tool, input=self.verification)])
-        return SimpleNamespace(content=[SimpleNamespace(type="text", text=self.draft_text)])
+        props = ((kw.get("output_config") or {}).get("format") or {}).get("schema", {}).get("properties", {})
+        if "intent" in props:
+            return _json_resp(self.classification)
+        if "grounded" in props:
+            return _json_resp(self.verification)
+        if "options" in props:
+            return _json_resp({"options": self.captions})
+        return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=self.draft_text)])
+
+
+def _json_resp(data):
+    import json
+    return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(data))])
 
 
 class RecordingNotifier(Notifier):

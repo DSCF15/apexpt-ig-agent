@@ -39,9 +39,9 @@ class Classification:
         return cls(
             intent=intent if intent in INTENTS else "outro",
             language=str(d.get("language", "pt"))[:8],
-            toxicity=float(d.get("toxicity", 0) or 0),
+            toxicity=min(max(float(d.get("toxicity", 0) or 0), 0.0), 1.0),
             needs_reply=bool(d.get("needs_reply", True)),
-            confidence=float(d.get("confidence", 0) or 0),
+            confidence=min(max(float(d.get("confidence", 0) or 0), 0.0), 1.0),
             summary=str(d.get("summary", ""))[:300],
         )
 

@@ -11,6 +11,12 @@ log = logging.getLogger(__name__)
 LISBON = ZoneInfo("Europe/Lisbon")
 # o httpx regista o URL de cada pedido, e o URL da Bot API contém o token: nunca em INFO
 logging.getLogger("httpx").setLevel(logging.WARNING)
+WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+
+
+def _short_when(dt) -> str:
+    local = dt.astimezone(LISBON)
+    return f"{WEEKDAYS[local.weekday()]} {local:%d/%m %H:%M}"
 
 
 class Notifier:
@@ -22,6 +28,14 @@ class Notifier:
 
     def send_post(self, post) -> int | None:  # devolve message_id
         log.info("post #%s para aprovação: %s", post.id, post.caption[:80])
+        return None
+
+    def send_caption_options(self, proposal) -> int | None:
+        log.info("proposta #%s: %s", proposal.id, [o["angle"] for o in proposal.options or []])
+        return None
+
+    def send_time_options(self, proposal, slots) -> int | None:
+        log.info("proposta #%s: horas sugeridas %s", proposal.id, slots)
         return None
 
     def alert(self, text: str) -> None:
@@ -83,6 +97,49 @@ class TelegramNotifier(Notifier):
             ]]},
         })
         return res["message_id"]
+
+    def send_caption_options(self, proposal) -> int | None:
+        opts = proposal.options or []
+        body = "\n\n".join(f"<b>{i}. {html.escape(o['angle'])}</b>\n{html.escape(o['caption'])}"
+                           for i, o in enumerate(opts, 1))
+        text = (f"<b>Proposta #{proposal.id}</b> · {html.escape(proposal.media_type)}\n"
+                f"Escolhe a legenda:\n\n{body}\n\n"
+                f"<i>Ou responde a esta mensagem com a tua própria legenda.</i>")[:4096]
+        row = [{"text": str(i), "callback_data": f"cap:{proposal.id}:{i - 1}"} for i in range(1, len(opts) + 1)]
+        res = self._call("sendMessage", {
+            "chat_id": self.chat_id, "text": text, "parse_mode": "HTML",
+            "reply_markup": {"inline_keyboard": [row, [
+                {"text": "🔄 Outras", "callback_data": f"capnew:{proposal.id}"},
+                {"text": "🗑 Cancelar", "callback_data": f"capx:{proposal.id}"},
+            ]]},
+        })
+        return res["message_id"]
+
+    def send_time_options(self, proposal, slots) -> int | None:
+        buttons = [{"text": _short_when(dt),
+                    "callback_data": f"when:{proposal.id}:{int(dt.timestamp())}"} for dt in slots]
+        text = (f"<b>Proposta #{proposal.id}</b>: quando publico?\n"
+                f"<i>Sugestões em hora de Lisboa. Para outra hora responde a esta mensagem com "
+                f"<code>HH:MM</code>, <code>DD/MM HH:MM</code> ou <code>agora</code>.</i>")
+        res = self._call("sendMessage", {
+            "chat_id": self.chat_id, "text": text, "parse_mode": "HTML",
+            "reply_markup": {"inline_keyboard": [buttons, [
+                {"text": "🗑 Cancelar", "callback_data": f"capx:{proposal.id}"}]]},
+        })
+        return res["message_id"]
+
+    def download_file(self, file_id: str, dest) -> int:
+        """Descarrega um ficheiro enviado ao bot (a Bot API só permite até 20 MB). Devolve o tamanho."""
+        info = self._call("getFile", {"file_id": file_id})
+        token_base = self.base.replace("/bot", "/file/bot", 1)
+        with self.http.stream("GET", f"{token_base}/{info['file_path']}", timeout=120) as r:
+            r.raise_for_status()
+            size = 0
+            with open(dest, "wb") as f:
+                for chunk in r.iter_bytes():
+                    size += len(chunk)
+                    f.write(chunk)
+        return size
 
     def alert(self, text: str) -> None:
         try:

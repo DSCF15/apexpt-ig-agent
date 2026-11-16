@@ -73,6 +73,13 @@ def publish_draft(self, draft_id: int) -> str:
         _deferred(self, e)
 
 
+@celery_app.task(name="app.tasks.propose_content")
+def propose_content(proposal_id: int) -> str:
+    from .content import ContentStudio
+    p = ContentStudio(get_agent()).generate(proposal_id)
+    return p.status if p else "missing"
+
+
 @celery_app.task(name="app.tasks.publish_due_posts")
 def publish_due_posts() -> list[int]:
     ids = get_agent().claim_due_posts()

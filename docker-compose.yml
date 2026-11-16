@@ -4,6 +4,7 @@ services:
     build: .
     env_file: .env
     ports: ["127.0.0.1:8000:8000"]   # só local; o acesso público é pelo Cloudflare Tunnel
+    volumes: ["./media:/srv/media"]   # ficheiros recebidos pelo Telegram (partilhados)
     depends_on: [postgres, redis]
     restart: unless-stopped
 
@@ -11,6 +12,7 @@ services:
     build: .
     env_file: .env
     command: celery -A app.tasks worker --loglevel=info --concurrency=2
+    volumes: ["./media:/srv/media"]   # ficheiros recebidos pelo Telegram (partilhados)
     depends_on: [postgres, redis]
     restart: unless-stopped
 
@@ -26,6 +28,7 @@ services:
     build: .
     env_file: .env
     command: python scripts/telegram_poll.py
+    volumes: ["./media:/srv/media"]   # ficheiros recebidos pelo Telegram (partilhados)
     depends_on: [postgres, redis]
     restart: unless-stopped
 

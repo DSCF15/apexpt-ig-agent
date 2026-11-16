@@ -32,6 +32,7 @@ No `.env`, preenche:
 - `REDIS_URL=redis://redis:6379/0`;
 - `DRY_RUN=false`;
 - `CLOUDFLARE_TUNNEL_TOKEN` (passo 3).
+- `PUBLIC_BASE_URL=https://agente.apexpt.app`: a Meta descarrega os ficheiros dos posts deste endereço.
 
 Se o repositório for privado, o `git clone` pede login. Usa um *fine-grained token* do GitHub, só com leitura deste repositório.
 
@@ -41,7 +42,7 @@ Se o repositório for privado, o `git clone` pede login. Usa um *fine-grained to
 2. Copia o **token** (a parte longa a seguir a `--token`) para `CLOUDFLARE_TUNNEL_TOKEN` no `.env`.
 3. Em **Public Hostname**, cria:
    - Subdomain `agente`, domain `apexpt.app`
-   - **Path: `webhook/.*`** (assim só os webhooks ficam públicos, não o painel)
+   - **Path: `(webhook|media)/.*`** (só os webhooks e os ficheiros dos posts ficam públicos, não o painel)
    - Service: `HTTP` → `api:8000`
 
 ## 4. Arrancar

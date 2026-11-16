@@ -88,6 +88,8 @@ def handle_telegram_update(update: dict) -> str:
         if str(cb.get("message", {}).get("chat", {}).get("id")) != str(s.telegram_chat_id):
             return "ignored"
         action, _, raw_id = (cb.get("data") or "").partition(":")
+        if action in ("cap", "capnew", "capx", "when"):
+            return _content_callback(cb, action, raw_id, agent)
         draft_id = int(raw_id) if raw_id.isdigit() else 0
         result = "?"
         label = f"#{draft_id}"
@@ -120,7 +122,13 @@ def handle_telegram_update(update: dict) -> str:
         return "ignored"
     text = (msg.get("text") or "").strip()
 
+    if any(k in msg for k in ("photo", "video", "document")):
+        return _content_media(msg, agent)
+
     if reply_to := msg.get("reply_to_message"):
+        studio = _studio(agent)
+        if (prop := studio.by_telegram_message(reply_to.get("message_id"))) and text:
+            return _content_reply(prop, text, studio, agent)
         draft = agent.draft_by_telegram_message(reply_to.get("message_id"))
         if draft and text and agent.approve(draft.id, edited_text=text):
             _tasks().publish_draft.delay(draft.id)
@@ -153,6 +161,93 @@ def handle_telegram_update(update: dict) -> str:
             f"Rascunhos à espera: {len(pending)} · posts por aprovar: {len(to_approve)} · "
             f"posts agendados: {len(posts)}\n{token_line}")
         return "status"
+    return "ignored"
+
+
+# ------------------------------------------------------------ Conteúdo (ficheiro → legenda → hora)
+def _studio(agent):
+    from .content import ContentStudio
+    return ContentStudio(agent)
+
+
+def _content_media(msg: dict, agent) -> str:
+    from .content import new_file_name
+    notifier, studio = agent.notifier, _studio(agent)
+    if photos := msg.get("photo"):
+        f, mime, media_type = photos[-1], "image/jpeg", "IMAGE"  # a última é a maior resolução
+    elif video := msg.get("video"):
+        f, mime, media_type = video, video.get("mime_type", "video/mp4"), "REELS"
+    else:
+        f = msg["document"]
+        mime = f.get("mime_type", "")
+        media_type = "REELS" if mime.startswith("video/") else "IMAGE"
+    name = new_file_name(mime)
+    if not name:
+        notifier.alert(f"Formato não suportado ({mime or 'desconhecido'}). Usa JPG, PNG, MP4 ou MOV.")
+        return "unsupported"
+    if (f.get("file_size") or 0) > 20 * 1024 * 1024:
+        notifier.alert("Ficheiro acima de 20 MB: o Telegram não deixa o bot descarregá-lo. "
+                       "Envia uma versão comprimida.")
+        return "too_big"
+    if not hasattr(notifier, "download_file"):
+        return "no_telegram"
+    notifier.download_file(f["file_id"], studio.media_dir / name)
+    prop = studio.start(file_name=name, media_type=media_type, hint=(msg.get("caption") or "").strip())
+    notifier.alert(f"Recebido (proposta #{prop.id}, {prop.media_type}). A preparar 3 legendas…")
+    _tasks().propose_content.delay(prop.id)
+    return "content_started"
+
+
+def _content_callback(cb: dict, action: str, raw: str, agent) -> str:
+    from datetime import timezone
+    notifier, studio = agent.notifier, _studio(agent)
+    pid_s, _, arg = raw.partition(":")
+    pid = int(pid_s) if pid_s.isdigit() else 0
+    result = "Já tratado ou inexistente"
+    if action == "cap" and arg.isdigit() and (p := studio.choose_caption(pid, option=int(arg))):
+        result = f"Legenda {int(arg) + 1} escolhida"
+    elif action == "capnew" and studio.regenerate(pid):
+        _tasks().propose_content.delay(pid)
+        result = "A pensar noutras legendas…"
+    elif action == "capx" and studio.discard(pid):
+        result = "Cancelado"
+    elif action == "when" and arg.isdigit():
+        when = datetime.fromtimestamp(int(arg), tz=timezone.utc)
+        current = studio.get(pid)
+        if current and current.status == "choose_time" and when <= datetime.now(timezone.utc):
+            result = "Essa hora já passou: responde à mensagem com outra hora"
+        else:
+            try:
+                if p := studio.choose_time(pid, when):
+                    result = f"Agendado (post #{p.post_id})"
+            except ValueError as e:
+                result = str(e)
+    if hasattr(notifier, "answer_callback"):
+        notifier.answer_callback(cb["id"], result)
+    if msg_id := cb.get("message", {}).get("message_id"):
+        notifier.edit_status(msg_id, f"Proposta #{pid}: {result}")
+    return result
+
+
+def _content_reply(prop, text: str, studio, agent) -> str:
+    from .content import parse_when
+    notifier = agent.notifier
+    if prop.status == "choose_caption" and studio.choose_caption(prop.id, text=text):
+        notifier.edit_status(prop.telegram_message_id, f"Proposta #{prop.id}: legenda tua escolhida")
+        return "content_caption"
+    if prop.status == "choose_time":
+        when = parse_when(text)
+        if not when:
+            notifier.alert("Não percebi a hora. Usa HH:MM, DD/MM HH:MM ou agora (hora de Lisboa, no futuro).")
+            return "bad_time"
+        try:
+            p = studio.choose_time(prop.id, when)
+        except ValueError as e:
+            notifier.alert(str(e))
+            return "error"
+        if p:
+            notifier.edit_status(prop.telegram_message_id, f"Proposta #{prop.id}: agendado (post #{p.post_id})")
+            return "content_scheduled"
     return "ignored"
 
 
@@ -296,6 +391,16 @@ def simulate(body: SimulateIn):
         _tasks().publish_draft.delay(d.id)
     return {"id": d.id, "status": d.status, "intent": d.intent, "reply": d.reply_text,
             "problems": d.problems}
+
+
+@app.get("/media/{name}", include_in_schema=False)
+def media(name: str):
+    """Ficheiros dos posts: a Meta descarrega-os daqui no momento de publicar."""
+    from .content import SAFE_NAME
+    path = Path(get_settings().media_dir) / name
+    if not SAFE_NAME.match(name) or not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path)
 
 
 PANEL = Path(__file__).parent / "static" / "painel.html"

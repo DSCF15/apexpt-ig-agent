@@ -315,7 +315,8 @@ class Agent:
 
     # ============ posts agendados ============
     def schedule_post(self, *, media_type: str, media_urls: list[str], caption: str,
-                      publish_at: datetime) -> ScheduledPost:
+                      publish_at: datetime, approved: bool = False) -> ScheduledPost:
+        """approved=True: já foi decidido por ti (ex.: escolhido no Telegram), não pede outra aprovação."""
         media_type = media_type.upper()
         if media_type not in VALID_MEDIA:
             raise ValueError(f"media_type deve ser um de {sorted(VALID_MEDIA)}")
@@ -331,7 +332,7 @@ class Agent:
             raise ValueError("publish_at precisa de fuso horário")
         post = ScheduledPost(media_type=media_type, media_urls=media_urls, caption=caption,
                              publish_at=publish_at.astimezone(timezone.utc),
-                             status="awaiting_approval" if self.s.post_approval else "pending")
+                             status="awaiting_approval" if self.s.post_approval and not approved else "pending")
         with self.sf() as s:
             s.add(post)
             s.commit()

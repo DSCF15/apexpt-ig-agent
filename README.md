@@ -112,6 +112,15 @@ Em produção, o painel fica atrás do mesmo proxy HTTPS que a API.
 
 No Windows, o worker do Celery precisa de `--pool=solo`: `celery -A app.tasks worker --pool=solo --loglevel=info`.
 
+## Publicar a partir do Telegram
+
+1. Envia ao bot uma **foto** (vira post) ou um **vídeo** (vira Reel). Na legenda da mensagem, escreve uma descrição curta do que é, por exemplo "novo ecrã de evolução dos alunos". Para publicar como Story, junta `#story`.
+2. O Claude propõe **3 legendas** com hashtags, com ângulos diferentes. Carrega em **1**, **2** ou **3**, em **🔄 Outras**, ou responde à mensagem com a tua própria legenda.
+3. Escolhe a **hora** num dos botões sugeridos ou responde com `HH:MM`, `DD/MM HH:MM` ou `agora` (hora de Lisboa).
+4. O post fica agendado e já conta como aprovado. A Meta descarrega o ficheiro de `PUBLIC_BASE_URL/media/...`.
+
+Limite do Telegram: o bot só consegue descarregar ficheiros até **20 MB**. Para vídeos maiores, envia-os comprimidos.
+
 ## Aprovação de posts
 
 Com `POST_APPROVAL=true` (por omissão), um post agendado fica **por aprovar**. O bot envia-te a pré-visualização (tipo, hora em Lisboa, links e legenda) com os botões **✅ Aprovar** e **❌ Rejeitar**:
